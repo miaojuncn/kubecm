@@ -410,7 +410,7 @@ func CheckAndTransformFilePath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") {
 		path = filepath.Join(homeDir(), path[2:])
 	}
-	_, err := os.Stat(path) //os.Stat获取文件信息
+	_, err := os.Stat(path) // os.Stat获取文件信息
 	if err != nil {
 		return "", err
 	}
@@ -460,4 +460,26 @@ func MacNotifier(msg string) error {
 // isMacOs check if current system is macOS
 func isMacOs() bool {
 	return r.GOOS == "darwin"
+}
+
+func copyConfigFile(srcFile, destFile string) error {
+	_, err := os.Stat(srcFile)
+	if err != nil {
+		return err
+	}
+	src, err := os.Open(srcFile)
+	defer src.Close()
+	if err != nil {
+		return err
+	}
+	dest, err := os.Create(destFile)
+	defer dest.Close()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(dest, src)
+	if err != nil {
+		return err
+	}
+	return nil
 }

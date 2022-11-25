@@ -18,14 +18,15 @@ limitations under the License.
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/savioxavier/termlink"
@@ -33,9 +34,12 @@ import (
 )
 
 var (
-	cfgFile   string
-	uiSize    int
-	macNotify bool
+	originCfgFile  = filepath.Join(homeDir(), ".kube", "config")
+	randomFilename = "config" + "-" + HashSufString(strconv.FormatInt(time.Now().Unix(), 10))
+	newCfgFile     = filepath.Join(homeDir(), ".kube", randomFilename)
+	cfgFile        string
+	uiSize         int
+	macNotify      bool
 )
 
 // Cli cmd struct
@@ -43,13 +47,29 @@ type Cli struct {
 	rootCmd *cobra.Command
 }
 
-//NewCli returns the cli instance used to register and execute command
+// NewCli returns the cli instance used to register and execute command
 func NewCli() *Cli {
 	cli := &Cli{
 		rootCmd: &cobra.Command{
 			Use:   "kubecm",
 			Short: "KubeConfig Manager.",
 			Long:  printLogo(),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				fmt.Println("test run")
+				return nil
+			},
+			PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+				defer func(name string) {
+					err := os.Remove(name)
+					if err != nil {
+						fmt.Println("remove random config file failed")
+					}
+				}(newCfgFile)
+				if err := copyConfigFile(newCfgFile, originCfgFile); err != nil {
+					return err
+				}
+				return nil
+			},
 		},
 	}
 	cli.rootCmd.SetOut(os.Stdout)
@@ -60,26 +80,32 @@ func NewCli() *Cli {
 }
 
 func (cli *Cli) setFlags() {
-	kubeconfig := flag.String("kubeconfig", filepath.Join(homeDir(), ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	var kubeconfig string
+	if err := copyConfigFile(originCfgFile, newCfgFile); err != nil {
+		kubeconfig = ""
+	} else {
+		kubeconfig = newCfgFile
+	}
+	// kubeconfig := flag.String("kubeconfig", filepath.Join(homeDir(), ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	flags := cli.rootCmd.PersistentFlags()
-	flags.StringVar(&cfgFile, "config", *kubeconfig, "path of kubeconfig")
+	flags.StringVar(&cfgFile, "config", kubeconfig, "path of kubeconfig")
 	flags.IntVar(&uiSize, "ui-size", 4, "number of list items to show in menu at once")
 	flags.BoolVarP(&macNotify, "mac-notify", "m", false, "enable to display Mac notification banner")
 }
 
 // Run command
-func (cli *Cli) Run() error {
-	// check and format kubeconfig path
-	config, err := CheckAndTransformFilePath(cfgFile)
-	if err != nil {
-		return err
-	}
-	err = flag.Set("config", config)
-	if err != nil {
-		return err
-	}
-	return cli.rootCmd.Execute()
-}
+// func (cli *Cli) Run() error {
+// 	// check and format kubeconfig path
+// 	config, err := CheckAndTransformFilePath(cfgFile)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = flag.Set("config", config)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return cli.rootCmd.Execute()
+// }
 func homeDir() string {
 	u, err := user.Current()
 	if nil == err {
